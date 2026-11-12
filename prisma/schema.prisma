@@ -1,0 +1,52 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  // google "sub" claim. stable, unlike email
+  googleId      String   @unique
+  email         String
+  name          String?
+  image         String?
+  // null = hasn't done onboarding yet
+  favoriteMovie String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  facts     Fact[]
+  factLocks FactGenerationLock[]
+}
+
+model Fact {
+  id        String   @id @default(cuid())
+  userId    String
+  // title the fact was generated for (cache key is user + movie)
+  movie     String
+  content   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // latest fact for a user + movie
+  @@index([userId, movie, createdAt(sort: Desc)])
+}
+
+// "generation in progress" flag. PK means max one row per user + movie.
+// expiresAt so a crashed request can't hold it forever.
+model FactGenerationLock {
+  userId    String
+  movie     String
+  token     String
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, movie])
+}
